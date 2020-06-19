@@ -18,14 +18,14 @@ if BATCH_SIZE == 1:
 
 	def save_img(object, object2,  j):
 		# for batch in range(BATCH_SIZE):
-		imgs = object[0][0]
-		img = (imgs > 0.5).float()
+		img = object[0][0]
+		# img = (imgs > 0.5).float()
 		# print(imgs.shape)
 		img = to_pil(img)
 		img.save("test_output/frame%d_mask.png" % i)
 
-		masks = object2[0][0]
-		mask = (masks > 0.5).float()
+		mask = object2[0][0]
+		# mask = (masks > 0.5).float()
 		mask = to_pil(mask)
 		mask.save("test_output/frame%d_pred.png" % i)
 		print('save!!!', i)

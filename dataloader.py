@@ -76,7 +76,7 @@ class Data_train(Dataset):
         return label
     
     def __len__(self):
-        return len(self.list_dir('imgs'))
+        return 32
         # return len(self.list_dir('imgs'))*len(self.list_dir('imgs'))
     
     def  __getitem__(self, idx):

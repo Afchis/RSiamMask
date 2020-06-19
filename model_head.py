@@ -62,6 +62,7 @@ class ModelDisigner(nn.Module):
 		corr_feat = self.Correlation_func(searchs_feat, target_feat)
 		##### Score Branch #####
 		score, pos_list = self.score_branch(corr_feat)
+		# print(pos_list)
 		##### Mask Branch #####
 		masks_feat = self.Chiose_RoW(corr_feat, pos_list)
 		mask = self.mask_branch(masks_feat).reshape(BATCH_SIZE, 1, 64, 64)

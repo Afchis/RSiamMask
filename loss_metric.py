@@ -72,7 +72,7 @@ def all_losses(x, y, d, xx, yy):
      ##### LOSS #####
       ##### LOSS #####
        ##### LOSS #####
-    all_losses =  bce_loss(x, y, d) + 0.05*score_loss(xx, yy) ##### LOSS #####
+    all_losses =  bce_loss(x, y, d) + 0.2*score_loss(xx, yy) ##### LOSS #####
         ##### LOSS #####
        ##### LOSS #####
       ##### LOSS #####

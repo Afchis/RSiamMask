@@ -27,7 +27,7 @@ except FileNotFoundError:
 	pass
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
 
 
 iter = 0
