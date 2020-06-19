@@ -76,16 +76,16 @@ class Data_train(Dataset):
         return label
     
     def __len__(self):
-        return 8
+        return len(self.list_dir('imgs'))
         # return len(self.list_dir('imgs'))*len(self.list_dir('imgs'))
     
     def  __getitem__(self, idx):
-        # search_name = self.list_dir('imgs')[(idx%self.len_dit())]
+        search_name = self.list_dir('imgs')[(idx%self.len_dit())]
         # target_name = self.list_dir('imgs')[(idx//self.len_dit())]
-        # mask_name = self.list_dir('masks')[(idx%self.len_dit())]
-        search_name = self.list_dir('imgs')[idx*4]
-        target_name = self.list_dir('imgs')[35]
-        mask_name = self.list_dir('masks')[idx*4]
+        mask_name = self.list_dir('masks')[(idx%self.len_dit())]
+        # search_name = self.list_dir('imgs')[idx*4]
+        target_name = self.list_dir('imgs')[10]
+        # mask_name = self.list_dir('masks')[idx*4]
         search = Image.open(self.data_path + 'bike/imgs/' + search_name).convert('RGB')
         target = Image.open(self.data_path + 'bike/imgs/' + target_name).convert('RGB')
         mask = Image.open(self.data_path + 'bike/masks/' + mask_name).convert('L')
