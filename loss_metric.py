@@ -33,7 +33,7 @@ def dice_loss(x, y, d, smooth = 1.):
     #print(dice_loss.mean().item())
     return dice_loss.mean()
 
-def dice_combo_loss(x, y, d, bce_weight=0.5):
+def dice_combo_loss(x, y, d, bce_weight=0.65):
     dice_combo_loss = bce_weight * bce_loss(x, y, d) + (1 - bce_weight) * dice_loss(x, y, d)
     return dice_combo_loss
 
@@ -50,7 +50,7 @@ def iou_combo_loss(x, y, d, bce_weight=0.2):
     iou_combo_loss = bce_weight * bce_loss(x, y, d) + (1 - bce_weight) * iou_loss(x, y, d)
     return iou_combo_loss
 
-def l2_combo_loss(x, y, d, bce_weight=0.5):
+def l2_combo_loss(x, y, d, bce_weight=0.65):
     l2_combo_loss = bce_weight * l2_loss(x, y, d) + bce_weight * bce_loss(x, y, d)# + dice_loss(x, y, d)
     # print(l2_combo_loss)
     return l2_combo_loss
@@ -72,7 +72,7 @@ def all_losses(x, y, d, xx, yy):
      ##### LOSS #####
       ##### LOSS #####
        ##### LOSS #####
-    all_losses =  bce_loss(x, y, d) + 0.2*score_loss(xx, yy) ##### LOSS #####
+    all_losses =  dice_combo_loss(x, y, d) + 0.04*score_loss(xx, yy) ##### LOSS #####
         ##### LOSS #####
        ##### LOSS #####
       ##### LOSS #####
@@ -85,15 +85,29 @@ def iou_metric(x, y, d, threshold=0.5, smooth = 1.):
     y = y.reshape(-1, NUM_CLASSES, TARGET_SIZE, TARGET_SIZE)
     # x = x[:, 1:]
     # y = y[:, 1:]
-    x = (x > threshold).float()
+    xx = (xx > 0.5).float()
+    xxx = (xx > 0.7).float()
+
     
     intersection = (x * y).sum(dim=2).sum(dim=2)
     x_sum = x.sum(dim=2).sum(dim=2)
     y_sum = y.sum(dim=2).sum(dim=2)
     union = x_sum + y_sum - intersection
-    iou_metric = ((intersection + smooth) / (union + smooth))
+    iou_metricx = ((intersection + smooth) / (union + smooth))
+
+    intersection = (xx * y).sum(dim=2).sum(dim=2)
+    x_sum = xx.sum(dim=2).sum(dim=2)
+    y_sum = y.sum(dim=2).sum(dim=2)
+    union = x_sum + y_sum - intersection
+    iou_metricxx = ((intersection + smooth) / (union + smooth))
+
+    intersection = (xxx * y).sum(dim=2).sum(dim=2)
+    x_sum = xxx.sum(dim=2).sum(dim=2)
+    y_sum = y.sum(dim=2).sum(dim=2)
+    union = x_sum + y_sum - intersection
+    iou_metricxxx = ((intersection + smooth) / (union + smooth))
     #print(dice_loss.mean().item())
-    return iou_metric.mean()
+    return iou_metricx.mean(), iou_metricxx.mean(), iou_metricxxx.mean()
 
 if __name__ == '__main__':
     x = torch.rand([1, NUM_CLASSES, TARGET_SIZE, TARGET_SIZE])

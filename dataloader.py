@@ -29,7 +29,7 @@ class Data_train(Dataset):
             ])
 
     def list_dir(self, object):
-        return sorted(os.listdir(self.data_path + 'bike/' + object))
+        return sorted(os.listdir(self.data_path + 'snow/' + object))
 
     def len_dit(self):
         return len(self.list_dir('/imgs'))
@@ -76,8 +76,7 @@ class Data_train(Dataset):
         return label
     
     def __len__(self):
-        return 32
-        # return len(self.list_dir('imgs'))*len(self.list_dir('imgs'))
+        return len(self.list_dir('imgs'))*len(self.list_dir('imgs'))
     
     def  __getitem__(self, idx):
         search_name = self.list_dir('imgs')[(idx%self.len_dit())]
@@ -86,9 +85,9 @@ class Data_train(Dataset):
         # search_name = self.list_dir('imgs')[idx*4]
         target_name = self.list_dir('imgs')[10]
         # mask_name = self.list_dir('masks')[idx*4]
-        search = Image.open(self.data_path + 'bike/imgs/' + search_name).convert('RGB')
-        target = Image.open(self.data_path + 'bike/imgs/' + target_name).convert('RGB')
-        mask = Image.open(self.data_path + 'bike/masks/' + mask_name).convert('L')
+        search = Image.open(self.data_path + 'snow/imgs/' + search_name).convert('RGB')
+        target = Image.open(self.data_path + 'snow/imgs/' + target_name).convert('RGB')
+        mask = Image.open(self.data_path + 'snow/masks/' + mask_name).convert('L')
         search = self.trans(search)
         target = self.ccrop(target)
         mask = self.trans(mask)

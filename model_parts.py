@@ -16,7 +16,12 @@ class Backbone(nn.Module):
 
 	def forward(self, x):
 		search_cat = self.model(x)
-		out = self.adjust(search_cat[4])
+		out = search_cat[4]
+		if out.size(3) < 20:
+			# print(out.shape)
+			out = out[:, :, 4:-4, 4:-4]
+			# print(out.shape)
+		out = self.adjust(out)
 		return search_cat, out
 
 
@@ -27,7 +32,7 @@ class ScoreBranch(nn.Module):
 			nn.Conv2d(256, 256, kernel_size=1),
 			nn.BatchNorm2d(256),
 			nn.ReLU(),
-			nn.Conv2d(256, NUM_CLASSES, kernel_size=1),
+			nn.Conv2d(256, 1, kernel_size=1),
 			nn.Sigmoid()
 			)
 

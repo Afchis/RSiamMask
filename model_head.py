@@ -29,7 +29,7 @@ class ModelDisigner(nn.Module):
 		return out
 
 	def Chiose_RoW(self, corr_feat, pos_list):
-		corr_feat = corr_feat.reshape(BATCH_SIZE, 17, 17, 256)
+		corr_feat = corr_feat.reshape(BATCH_SIZE, 25, 25, 256)
 		j_tensors = torch.tensor([]).to(device)
 		for j in range(corr_feat.size(0)):
 			j_tensor = corr_feat[j][pos_list[j, 0]][pos_list[j, 1]].unsqueeze(0)

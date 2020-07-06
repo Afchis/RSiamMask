@@ -21,7 +21,7 @@ model = ModelDisigner()
 model = model.to(device)
 # model.load_state_dict(torch.load('pathignore/weights/run_00.pth'))
 try:
-	model.load_state_dict(torch.load('pathignore/weights/%s.pth' % GRAPH_NAME))
+	model.load_state_dict(torch.load('pathignore/weights/%s.pth' % GRAPH_NAME), )#strict=False
 except FileNotFoundError:
 	print('!!!Create new weights!!!')
 	pass
