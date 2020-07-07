@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 
 from args import *
 from model_parts import *
@@ -16,59 +17,75 @@ class ModelDisigner(nn.Module):
 		self.score_branch = ScoreBranch()
 		self.mask_branch = MaskBranch()
 		self.up = nn.Upsample(scale_factor=2, mode='nearest')
-		self.final = nn.Sequential(
-			nn.Conv2d(1, NUM_CLASSES, kernel_size=1),
-			nn.Sigmoid()
-			)
+		self.sig = nn.Sigmoid()
 
-	def Correlation_func(self, s_f, t_f): # s_f-->search_feat, t_f-->target_feat
-		t_f = t_f.reshape(-1, 1, t_f.size(2), t_f.size(3))
-		out = s_f.reshape(1, -1, s_f.size(2), s_f.size(3)) # 1, b*ch, 32, 32
-		out = F.conv2d(out, t_f, groups=t_f.size(0))
-		out = out.reshape(-1, s_f.size(1), out.size(2), out.size(3))
-		return out
+		self.training = True
 
-	def Chiose_RoW(self, corr_feat, pos_list):
-		corr_feat = corr_feat.reshape(BATCH_SIZE, 25, 25, 256)
-		j_tensors = torch.tensor([]).to(device)
-		for j in range(corr_feat.size(0)):
-			j_tensor = corr_feat[j][pos_list[j, 0]][pos_list[j, 1]].unsqueeze(0)
-			j_tensors = torch.cat([j_tensors, j_tensor], dim=0)
-		j_tensors = j_tensors.unsqueeze(2).unsqueeze(3)
-		return j_tensors
-
-
-	def Choise_feat(self, feat, pos_list, x):
-		feat = feat.reshape(TIMESTEPS, BATCH_SIZE, feat.size(1), feat.size(2), feat.size(3))
-		feat = feat.permute(0, 1, 3, 4, 2)
-
-		i_tensors = torch.tensor([]).to(device)
-		for i in range(feat.size(0)):
-			j_tensors = torch.tensor([]).to(device)
-			for j in range(feat.size(1)):
-				j_tensor = feat[i][j][x*pos_list[i][j][0]:x*pos_list[i][j][0]+x*16, x*pos_list[i][j][1]:x*pos_list[i][j][1]+x*16, :].unsqueeze(0)
-				j_tensors = torch.cat([j_tensors, j_tensor], dim=0)
-			i_tensor = j_tensors.unsqueeze(0)
-			i_tensors = torch.cat([i_tensors, i_tensor], dim=0)
-
-		feat = i_tensors.permute(0, 1, 4, 2, 3)
-		feat = feat.reshape(TIMESTEPS*BATCH_SIZE, feat.size(2), feat.size(3), feat.size(4))
-		return feat
-
-
-	def forward(self, target, searchs):
+	def forward(self, target, searchs, score_label, mask_label):
+		# mask_label = mask_label[:, :, 64:-64, 64:-64]
 		_,  target_feat = self.backbone(target)
 		search_cats, searchs_feat = self.backbone(searchs)
-		corr_feat = self.Correlation_func(searchs_feat, target_feat)
 		##### Score Branch #####
-		score, pos_list = self.score_branch(corr_feat)
-		# print(pos_list)
+		score = self.score_branch(target_feat, searchs_feat)
+		score = self.sig(score)
 		##### Mask Branch #####
-		masks_feat = self.Chiose_RoW(corr_feat, pos_list)
-		mask = self.mask_branch(masks_feat).reshape(BATCH_SIZE, 1, 64, 64)
-		mask = self.up(mask)
-		mask = self.final(mask)
-		return score, mask
+		masks = self.mask_branch(target_feat, searchs_feat)
+		# masks = self.sig(masks)
+		# masks = self.up(masks)
+		##### Losses #####
+		score_loss = self.score_loss_bce(score, score_label)
+		mask_loss, afchi_label, afchi_mask = self.select_mask_logistic_loss(masks, mask_label, score_label)
+		return score, afchi_mask, score_loss, mask_loss, afchi_label
+
+	def get_cls_loss(self, pred, label, select):
+		if select.nelement() == 0: return pred.sum()*0.
+		pred = torch.index_select(pred, 0, select)
+		label = torch.index_select(label, 0, select)
+		return F.cross_entropy(pred, label)
+
+	def score_loss(self, score, score_label):
+		# score = F.log_softmax(score, dim=1)
+		score_label = score_label.view(-1)
+		score = score.view(-1, 2)
+		pos = Variable(score_label.data.eq(1).nonzero().squeeze()).cuda()
+		neg = Variable(score_label.data.eq(0).nonzero().squeeze()).cuda()
+
+		loss_pos = self.get_cls_loss(score, score_label.long(), pos)
+		loss_neg = self.get_cls_loss(score, score_label.long(), neg)
+		loss = 0.5*loss_pos + 0.5*loss_neg
+		return loss
+
+	def select_mask_logistic_loss(self, p_m, mask, weight, o_sz=63, g_sz=127):
+		weight = weight.view(-1)
+		pos = Variable(weight.data.eq(1).nonzero().squeeze())
+		if pos.nelement() == 0: return p_m.sum() * 0, p_m.sum() * 0, p_m.sum() * 0, p_m.sum() * 0
+
+		p_m = p_m.permute(0, 2, 3, 1).contiguous().view(-1, 1, o_sz, o_sz)
+		p_m = torch.index_select(p_m, 0, pos)
+
+		p_m = nn.UpsamplingBilinear2d(size=[g_sz, g_sz])(p_m)
+		p_m = p_m.view(-1, g_sz * g_sz)
+
+		mask_uf = F.unfold(mask, (g_sz, g_sz), padding=32, stride=8)
+		mask_uf = torch.transpose(mask_uf, 1, 2).contiguous().view(-1, g_sz * g_sz)
+
+		mask_uf = torch.index_select(mask_uf, 0, pos)
+		afchi_label = mask_uf
+		afchi_mask = (p_m >= 0).float()
+		loss = F.soft_margin_loss(p_m, mask_uf)
+		return loss, afchi_label, afchi_mask
+
+	def score_loss_bce(self, score, score_label):
+		return F.binary_cross_entropy(score, score_label)
+
+	def mask_loss_bce(self, masks, mask_label):
+		return F.binary_cross_entropy(score, score_label)
+
+
+
+
+
+
 
 
 if __name__ == '__main__':

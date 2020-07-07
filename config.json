@@ -3,7 +3,7 @@
         "arch": "Custom"
     },
     "hp": {
-        "instance_size": 256,
+        "instance_size": 255,
         "base_size": 8
     },
     "lr": {
@@ -30,8 +30,8 @@
                 "frame_range": 20
             }
         },
-        "template_size": 128,
-        "search_size": 256,
+        "template_size": 127,
+        "search_size": 255,
         "base_size": 8,
         "size": 25,
 

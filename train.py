@@ -42,7 +42,7 @@ for epoch in range(NUM_EPOCH):
 				target, searchs, labels, depths, score_labels \
 				 = target.to(device), searchs.to(device), labels.to(device), depths.to(device), score_labels.to(device)
 				pred_scores, pred_masks = model(target, searchs)
-				metric = iou_metric(pred_masks, labels, depths).mean().item()
+				metric = iou_metric(pred_masks, labels, depths)#.mean().item()
 				loss = all_losses(pred_masks, labels, depths, pred_scores, score_labels)
 				loss.backward()
 				optimizer.step()

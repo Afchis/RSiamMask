@@ -32,7 +32,7 @@ parser.add_argument('--epochs', default=50, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch', default=1, type=int,
+parser.add_argument('-b', '--batch', default=16, type=int,
                     metavar='N', help='mini-batch size (default: 64)')
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate')
@@ -683,6 +683,7 @@ def build_data_loader(cfg):
     return train_loader, val_loader
 
 import torchvision.transforms as transforms
+import torch.nn.functional as F
 to_pil = transforms.ToPILImage()
 
 from model_head import *
@@ -690,89 +691,175 @@ from args import *
 from siam_mask_loss import *
 
 
-model = ModelDisigner()
-model = model.to(device)
-
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-
-def bce_loss(x, y):
-    bce_loss =  F.binary_cross_entropy(x, y).mean()
-    return bce_loss
-
+# model = ModelDisigner()
 def main():
     global args, best_acc, tb_writer, logger
     args = parser.parse_args()
     cfg = load_config(args)
     train_loader, val_loader = build_data_loader(cfg)
-    for i, data in enumerate(train_loader):
-        # print(x['template'].shape) # torch.Size([1, 3, 128, 128])
-        # print(x['search'].shape) # torch.Size([1, 3, 128, 128])
-        # print(x['label_cls'].shape) # torch.Size([1, 5, 25, 25])
-        # print(x['label_loc'].shape) # torch.Size([1, 4, 5, 25, 25])
-        # print(x['label_loc_weight'].shape) # torch.Size([1, 5, 25, 25])
-        # print(x['label_mask'].shape) # torch.Size([1, 1, 256, 256])
-        # print(x['label_mask_weight'].shape) # torch.Size([1, 1, 25, 25])
-        x = {
-            'cfg': cfg,
-            'template': torch.autograd.Variable(data[0]).cuda(),
-            'search': torch.autograd.Variable(data[1]).cuda(),
-            'label_cls': torch.autograd.Variable(data[2]).cuda(),
-            'label_loc': torch.autograd.Variable(data[3]).cuda(),
-            'label_loc_weight': torch.autograd.Variable(data[4]).cuda(),
-            'label_mask': torch.autograd.Variable(data[6]).cuda(),
-            'label_mask_weight': torch.autograd.Variable(data[7]).cuda(),
-        }
 
-        # img = (x['label_mask_weight']==1)
-        # print(img)
+    from custom import Custom
+    model = Custom(pretrain=True, anchors=cfg['anchors'])
+    model = model.to(device)
 
-        # SAVE IMGS
-        # template = x['template']/255.
-        # template = to_pil(template[0].cpu())
-        # template.save("pos_out/frame%d_template.png" % i)
-        # search = x['search']/255.
-        # search = to_pil(search[0].cpu())
-        # search.save("pos_out/frame%d_search.png" % i)
-        # label_mask = x['label_mask']/255.
-        # label_mask = to_pil(label_mask[0].cpu())
-        # label_mask.save("pos_out/frame%d_label_mask.png" % i)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
+    for epoch in range(20):
+        for i, data in enumerate(train_loader):
+            # print(x['template'].shape) # torch.Size([1, 3, 128, 128])
+            # print(x['search'].shape) # torch.Size([1, 3, 128, 128])
+            # print(x['label_cls'].shape) # torch.Size([1, 5, 25, 25])
+            # print(x['label_loc'].shape) # torch.Size([1, 4, 5, 25, 25])
+            # print(x['label_loc_weight'].shape) # torch.Size([1, 5, 25, 25])
+            # print(x['label_mask'].shape) # torch.Size([1, 1, 256, 256])
+            # print(x['label_mask_weight'].shape) # torch.Size([1, 1, 25, 25])
+            x = {
+                'cfg': cfg,
+                'template': torch.autograd.Variable(data[0]).cuda(),
+                'search': torch.autograd.Variable(data[1]).cuda(),
+                'label_cls': torch.autograd.Variable(data[2]).cuda(),
+                'label_loc': torch.autograd.Variable(data[3]).cuda(),
+                'label_loc_weight': torch.autograd.Variable(data[4]).cuda(),
+                'label_mask': torch.autograd.Variable(data[6]).cuda(),
+                'label_mask_weight': torch.autograd.Variable(data[7]).cuda(),
+            }
 
-        # print((x['label_mask']==1)[0, 0, 128])
-        loc = (x['label_mask_weight']==1).float()
-        mask = (x['label_mask'][:, :, 64:-64, 64:-64]==1).float()
+            # SAVE IMGS
+            # template = x['template']/255.
+            # template = to_pil(template[0].cpu())
+            # template.save("pos_out/frame%d_template.png" % i)
+            # search = x['search']/255.
+            # search = to_pil(search[0].cpu())
+            # search.save("pos_out/frame%d_search.png" % i)
+            # label_mask = x['label_mask']/255.
+            # label_mask = to_pil(label_mask[0].cpu())
+            # label_mask.save("pos_out/frame%d_label_mask.png" % i)
 
-        pred_scores, pred_masks = model(x['template'], x['search'])
+            # label_score = (x['label_mask_weight']==1).float()
+            # mask = (x['label_mask'][:, :, 64:-64, 64:-64]==1).float()
 
-        # print(pred_scores.shape, x['label_mask_weight'].shape)
-        # print(loc)
+            outputs = model(x)
 
+            rpn_cls_loss, rpn_loc_loss, rpn_mask_loss = torch.mean(outputs['losses'][0]), torch.mean(outputs['losses'][1]), torch.mean(outputs['losses'][2])
+            mask_iou_mean, mask_iou_at_5, mask_iou_at_7 = torch.mean(outputs['accuracy'][0]), torch.mean(outputs['accuracy'][1]), torch.mean(outputs['accuracy'][2])
 
-        # loss = bce_loss(pred_masks, x['label_mask'][:, :, 64:-64, 64:-64])
-        # print(loss)
-        
-        loss = bce_loss(pred_scores, loc)+32*bce_loss(pred_masks, mask)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+            cls_weight, reg_weight, mask_weight = cfg['loss']['weight']
+            print('rpn_cls_loss: ', rpn_cls_loss.item(), 'rpn_loc_loss: ', rpn_loc_loss.item(), 'rpn_mask_loss: ', rpn_mask_loss.item())
 
-        print(pred_masks, loss)
+            loss = rpn_cls_loss * cls_weight + rpn_loc_loss * reg_weight + rpn_mask_loss * mask_weight
 
-        # print('pred_scores: ', pred_scores[0, 1:])
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-
-        if i % 100 == 0:
-            pred = to_pil(pred_masks[0].cpu())
-            pred.save("pos_out/0pred.png")
-            label = to_pil(mask[0].cpu())
-            label.save("pos_out/0label.png")
-        
+            afchi_mask, afchi_label = outputs['afchi_masks']
+            afchi_mask = F.sigmoid(afchi_mask)
+            # print(afchi_mask.shape)
 
 
+            # if i % 50 == 0:
+            #     pred = to_pil(pred_scores[0, 0].cpu())
+            #     pred.save("pos_out/0pred0.png")
+            #     pred1 = to_pil(pred_scores[0, 1].cpu())
+            #     pred1.save("pos_out/0pred1.png")
+            #     label = to_pil(label_score[0, 0].cpu())
+            #     label.save("pos_out/0label.png")
+            #     print('save pictures!')
+            
+            # Save pred masks
 
-        if i == 10000 :
-            print('quit()')
-            quit()
+            # Afchi.add:
+            if i%10==0:
+                afchi_mask, afchi_label = outputs['afchi_masks']
+                afchi_mask, afchi_label = afchi_mask[0], afchi_label[0]
+                afchi_mask = afchi_mask.reshape(1, -1, 1)
+                afchi_label = afchi_label.reshape(1, -1, 1)
+                afchi_mask = F.fold(afchi_mask, 127, kernel_size=127)
+                afchi_label = F.fold(afchi_label, 127, kernel_size=127)
+                afchi_mask_img = to_pil(afchi_mask[0].cpu())
+                afchi_label_img = to_pil(afchi_label[0].cpu())
+                # print(afchi_mask.shape, afchi_label.shape)
+                # print(afchi_mask_img, afchi_label_img)
+                afchi_mask_img.save("pos_out/pred.png")
+                afchi_label_img.save("pos_out/label.png")
 
+
+from model_head import *            #   Afchi.add: end
+def main1():
+    global args, best_acc, tb_writer, logger
+    args = parser.parse_args()
+    cfg = load_config(args)
+    train_loader, val_loader = build_data_loader(cfg)
+
+    
+    model = ModelDisigner()
+    model = model.to(device)
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.005)
+    for epoch in range(20):
+        for i, data in enumerate(train_loader):
+            # print(x['template'].shape) # torch.Size([1, 3, 128, 128])
+            # print(x['search'].shape) # torch.Size([1, 3, 128, 128])
+            # print(x['label_cls'].shape) # torch.Size([1, 5, 25, 25])
+            # print(x['label_loc'].shape) # torch.Size([1, 4, 5, 25, 25])
+            # print(x['label_loc_weight'].shape) # torch.Size([1, 5, 25, 25])
+            # print(x['label_mask'].shape) # torch.Size([1, 1, 256, 256])
+            # print(x['label_mask_weight'].shape) # torch.Size([1, 1, 25, 25])
+            x = {
+                'cfg': cfg,
+                'template': torch.autograd.Variable(data[0]).cuda(),
+                'search': torch.autograd.Variable(data[1]).cuda(),
+                'label_cls': torch.autograd.Variable(data[2]).cuda(),
+                'label_loc': torch.autograd.Variable(data[3]).cuda(),
+                'label_loc_weight': torch.autograd.Variable(data[4]).cuda(),
+                'label_mask': torch.autograd.Variable(data[6]).cuda(),
+                'label_mask_weight': torch.autograd.Variable(data[7]).cuda(),
+            }
+
+            # SAVE IMGS
+            # template = x['template']/255.
+            # template = to_pil(template[0].cpu())
+            # template.save("pos_out/frame%d_template.png" % i)
+            # search = x['search']/255.
+            # search = to_pil(search[0].cpu())
+            # search.save("pos_out/frame%d_search.png" % i)
+            # label_mask = x['label_mask']/255.
+            # label_mask = to_pil(label_mask[0].cpu())
+            # label_mask.save("pos_out/frame%d_label_mask.png" % i)
+
+            # label_score = (x['label_mask_weight']==1).float()
+            # mask = (x['label_mask'][:, :, 64:-64, 64:-64]==1).float()
+
+            pred_scores, pred_mask, score_loss, mask_loss, label = model(x['template'], x['search'], (x['label_mask_weight']==1).float(), x['label_mask'])
+            loss = score_loss + 32* mask_loss
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            print(loss)
+            # print(pred_mask.shape, label.shape)
+
+
+            # if i % 50 == 0:
+            #     pred = to_pil(pred_scores[0].cpu())
+            #     pred.save("pos_out/0pred0.png")
+            #     # label = to_pil(label_score[0, 0].cpu())
+            #     # label.save("pos_out/0label.png")
+            #     print('save pictures!')
+            
+            # Save pred masks
+
+            # Afchi.add:
+            if i%10==0:
+                afchi_mask, afchi_label = pred_mask[0], label[0]
+                afchi_mask = afchi_mask.reshape(1, -1, 1)
+                afchi_label = afchi_label.reshape(1, -1, 1)
+                afchi_mask = F.fold(afchi_mask, 127, kernel_size=127)
+                afchi_label = F.fold(afchi_label, 127, kernel_size=127)
+                afchi_mask_img = to_pil(afchi_mask[0].cpu())
+                afchi_label_img = to_pil(afchi_label[0].cpu())
+                print(afchi_mask.shape, afchi_label.shape)
+                print(afchi_mask_img, afchi_label_img)
+                afchi_mask_img.save("pos_out/pred.png")
+                afchi_label_img.save("pos_out/label.png")
 
 if __name__ == '__main__':
-    main()
+    main1()

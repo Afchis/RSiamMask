@@ -68,7 +68,7 @@ def all_losses(x, y, d, xx, yy):
     x = x.reshape(-1, NUM_CLASSES, TARGET_SIZE, TARGET_SIZE)
     y = y.reshape(-1, NUM_CLASSES, TARGET_SIZE, TARGET_SIZE)
     d = d.reshape(-1, 1, TARGET_SIZE, TARGET_SIZE)
-    xx, yy = xx.reshape(-1, NUM_CLASSES, 17, 17), yy.reshape(-1, NUM_CLASSES, 17, 17)
+    xx, yy = xx.reshape(-1, NUM_CLASSES, 25, 25), yy.reshape(-1, NUM_CLASSES, 25, 25)
      ##### LOSS #####
       ##### LOSS #####
        ##### LOSS #####
@@ -85,8 +85,8 @@ def iou_metric(x, y, d, threshold=0.5, smooth = 1.):
     y = y.reshape(-1, NUM_CLASSES, TARGET_SIZE, TARGET_SIZE)
     # x = x[:, 1:]
     # y = y[:, 1:]
-    xx = (xx > 0.5).float()
-    xxx = (xx > 0.7).float()
+    xx = (x > 0.5).float()
+    xxx = (x > 0.7).float()
 
     
     intersection = (x * y).sum(dim=2).sum(dim=2)

@@ -1,13 +1,22 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from args import *
-from resnet import *
+from resnet_afchi import *
 
 
 '''
 Siam parts
 '''
+def Correlation_func(t_f, s_f): # s_f-->search_feat, t_f-->target_feat
+	t_f = t_f.reshape(-1, 1, t_f.size(2), t_f.size(3))
+	out = s_f.reshape(1, -1, s_f.size(2), s_f.size(3)) # 1, b*ch, 32, 32
+	out = F.conv2d(out, t_f, groups=t_f.size(0))
+	out = out.reshape(-1, s_f.size(1), out.size(2), out.size(3))
+	return out
+
+
 class Backbone(nn.Module):
 	def __init__(self):
 		super(Backbone, self).__init__()
@@ -18,9 +27,7 @@ class Backbone(nn.Module):
 		search_cat = self.model(x)
 		out = search_cat[4]
 		if out.size(3) < 20:
-			# print(out.shape)
 			out = out[:, :, 4:-4, 4:-4]
-			# print(out.shape)
 		out = self.adjust(out)
 		return search_cat, out
 
@@ -28,60 +35,57 @@ class Backbone(nn.Module):
 class ScoreBranch(nn.Module):
 	def __init__(self):
 		super(ScoreBranch, self).__init__()
+		self.conv_target = nn.Sequential(
+			nn.Conv2d(256, 256, kernel_size=3),
+			nn.BatchNorm2d(256),
+			nn.ReLU(inplace=True),
+			)
+		self.conv_searchs = nn.Sequential(
+			nn.Conv2d(256, 256, kernel_size=3),
+			nn.BatchNorm2d(256),
+			nn.ReLU(inplace=True),
+			)
 		self.branch = nn.Sequential(
 			nn.Conv2d(256, 256, kernel_size=1),
 			nn.BatchNorm2d(256),
 			nn.ReLU(),
 			nn.Conv2d(256, 1, kernel_size=1),
-			nn.Sigmoid()
 			)
 
-	def forward(self, x):
-		score = self.branch(x)
-		pos_list = torch.tensor([], dtype=int).to(device)
-		for i in range(score.size(0)):
-			max_value = score[i][0].max()
-			pos = (score[i] == max_value).nonzero()[0][1:].unsqueeze(0)
-			pos_list = torch.cat([pos_list, pos], dim=0)
-		return score, pos_list		
+	def forward(self, target_feat, searchs_feat):
+		t_f = self.conv_target(target_feat)
+		s_f = self.conv_searchs(searchs_feat)
+		out = Correlation_func(t_f, s_f)
+		out = self.branch(out)
+		return out
 
-
-# class MaskBranch(nn.Module):
-# 	def __init__(self):
-# 		super(MaskBranch, self).__init__()
-# 		self.deconv = nn.ConvTranspose2d(256, 32, 16, 16)
-# 		self.branch = nn.Conv2d(32, 32, kernel_size=1)
-
-# 	def forward(self, masks_feat):
-		
-# 		out = self.deconv(masks_feat)
-# 		# out = out.reshape(TIMESTEPS*BATCH_SIZE, 32, 16, 16)
-# 		return out
 
 class MaskBranch(nn.Module):
 	def __init__(self):
 		super(MaskBranch, self).__init__()
+		self.conv_target = nn.Sequential(
+			nn.Conv2d(256, 256, kernel_size=3),
+			nn.BatchNorm2d(256),
+			nn.ReLU(inplace=True),
+			)
+		self.conv_searchs = nn.Sequential(
+			nn.Conv2d(256, 256, kernel_size=3),
+			nn.BatchNorm2d(256),
+			nn.ReLU(inplace=True),
+			)
 		self.branch = nn.Sequential(
 			nn.Conv2d(256, 256, kernel_size=1),
-			# nn.BatchNorm2d(256),
+			nn.BatchNorm2d(256),
 			nn.ReLU(),
-			nn.Conv2d(256, 64*64, kernel_size=1),
+			nn.Conv2d(256, 63*63, kernel_size=1),
 			)
 
-	def forward(self, masks_feat):
-		# print(masks_feat.shape)
-		out = self.branch(masks_feat)
-		# print(out.shape)
+	def forward(self, target_feat, searchs_feat):
+		t_f = self.conv_target(target_feat)
+		s_f = self.conv_searchs(searchs_feat)
+		out = Correlation_func(t_f, s_f)
+		out = self.branch(out)
 		return out
-
-# class MaskBranch3(nn.Module):
-# 	def __init__(self):
-# 		super(MaskBranch3, self).__init__() 
-# 		self.deconv = nn.ConvTranspose2d(256, 2, 64, 64)
-
-# 	def forward(self, masks_feat):
-# 		out = self.deconv(masks_feat)
-# 		return out
 
 
 if __name__ == '__main__':
